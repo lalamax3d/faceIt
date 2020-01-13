@@ -1,3 +1,4 @@
+import os
 import tkinter
 import cv2
 import PIL.Image, PIL.ImageTk
@@ -9,8 +10,12 @@ from imutils import face_utils
 print("[INFO] loading facial landmark predictor...")
 
 detector = dlib.get_frontal_face_detector()
-model = "data\\shape_predictor_68_face_landmarks.dat"
+model = os.path.join('data','shape_predictor_68_face_landmarks.dat')
 predictor = dlib.shape_predictor(model)
+
+
+
+
 
 class App(tkinter.Tk):
     # def __init__(self, window, window_title, video_source=0):
@@ -40,8 +45,14 @@ class App(tkinter.Tk):
         # NON WINDOW STUFF (TECH)
         self.video_source = video_source
         self.vid = None
+        self.detect = False # when true, dlib will detect faces etc
+        self.headPoseEst = False # when true, head pose estimation from dlib landmarks
+        self.transmit = False # when true, osc msg will be sent
+        self.procHead = True #
+        self.procFace = True #
         self.x = self.y = 0
-        self.isSel = False
+        
+        self.isSel = False # user selecting viewport area etc
         self.selRect = None
         self.start_x = None
         self.start_y = None
