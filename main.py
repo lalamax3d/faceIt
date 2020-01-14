@@ -6,7 +6,7 @@ import time
 import dlib
 import imutils
 from imutils import face_utils
-
+from unit_tests_concepts import headPoseEstimation as hpe
 print("[INFO] loading facial landmark predictor...")
 
 detector = dlib.get_frontal_face_detector()
@@ -32,8 +32,8 @@ class App(tkinter.Tk):
         self.capture = tkinter.BooleanVar(value=False) # when true, video will be captured and updated in UI frame
         self.vid = None # holds video stream from camera
         self.video_source = video_source
-        self.detect = tkinter.BooleanVar(value=True) # when true, dlib will detect faces etc
-        self.headPoseEst = False # when true, head pose estimation from dlib landmarks
+        self.detect = tkinter.BooleanVar(value=False) # when true, dlib will detect faces etc
+        self.headPoseEst = tkinter.BooleanVar(value=False) # when true, head pose estimation from dlib landmarks
         self.transmit = False # when true, osc msg will be sent
         self.procHead = True #
         self.procFace = True #
@@ -72,11 +72,9 @@ class App(tkinter.Tk):
     def addButtonsInToolbar(self):
         self.btnStart = tkinter.Button(self.tb, text="Start", relief="raised", command=self.toggleCam)
         self.btnStart.pack(side="left", fill='both')
-        #self.btnStop = tkinter.Button(self.tb, text="Stop",  command=self.stopCam)
-        #self.btnStop.pack(side="left", fill='both')
-        #self.btnFaceDetect = tkinter.Button(self.tb, text="FaceDetector",  command=self.snapshot)
-        #self.btnFaceDetect.pack(side="left", fill='both')
-        self.faceDetect = tkinter.Checkbutton(self.tb, text="Detect", variable=self.detect, command=self.callback2)
+        self.faceDetect = tkinter.Checkbutton(self.tb, text="Face", variable=self.detect, command=self.callback2)
+        self.faceDetect.pack(side="left", fill='both')
+        self.faceDetect = tkinter.Checkbutton(self.tb, text="Head", variable=self.headPoseEst, command=self.callback2)
         self.faceDetect.pack(side="left", fill='both')
         self.StartServer = tkinter.Button(self.tb, text="Snapshot",  command=self.snapshot)
         self.StartServer.pack(side="left", fill='both')
@@ -105,12 +103,22 @@ class App(tkinter.Tk):
             # convert the facial landmark (x, y)-coordinates to a NumPy array
             shape = predictor(gray, rect)
             shape = face_utils.shape_to_np(shape)
-
+            if self.headPoseEst.get() == True:
+                self.procHeadRotation(gray,shape)
             # loop over the (x, y)-coordinates for the facial landmarks
             # and draw them on the image
             for (x, y) in shape:
                 cv2.circle(gray, (x, y), 1, (0, 0, 255), -1)
         return gray
+    def procHeadRotation(self,frame,shape):
+        reprojectdst, euler_angle = hpe.get_head_pose(shape)
+        for start, end in hpe.line_pairs:
+            cv2.line(frame, reprojectdst[start], reprojectdst[end], (0, 0, 255))
+
+        cv2.putText(frame, "X: " + "{:7.2f}".format(euler_angle[0, 0]), (20, 20), cv2.FONT_HERSHEY_SIMPLEX, 0.75, (150, 50, 50), thickness=2)
+        cv2.putText(frame, "Y: " + "{:7.2f}".format(euler_angle[1, 0]), (20, 50), cv2.FONT_HERSHEY_SIMPLEX, 0.75, (50, 150, 50), thickness=2)
+        cv2.putText(frame, "Z: " + "{:7.2f}".format(euler_angle[2, 0]), (20, 80), cv2.FONT_HERSHEY_SIMPLEX, 0.75, (50, 50, 150), thickness=2)
+        return frame
     def update(self):
         # if camera is ON
         if self.vid:
@@ -118,7 +126,8 @@ class App(tkinter.Tk):
             frame2 = imutils.resize(frame, width=320)
             gray = cv2.cvtColor(frame2, cv2.COLOR_BGR2GRAY)
             if ret:
-                gray = self.faceDetector(gray)
+                if self.detect.get():
+                    gray = self.faceDetector(gray)
                 self.photo = PIL.ImageTk.PhotoImage(image = PIL.Image.fromarray(frame))
                 self.photo2 = PIL.ImageTk.PhotoImage(image = PIL.Image.fromarray(gray))
                 self.canvas1.create_image(0, 0, image = self.photo, anchor = tkinter.NW,tags="image")

@@ -50,10 +50,7 @@ def get_head_pose(shape):
                             shape[48], shape[54], shape[57], shape[8]])
 
     _, rotation_vec, translation_vec = cv2.solvePnP(object_pts, image_pts, cam_matrix, dist_coeffs)
-
-    reprojectdst, _ = cv2.projectPoints(reprojectsrc, rotation_vec, translation_vec, cam_matrix,
-                                        dist_coeffs)
-
+    reprojectdst, _ = cv2.projectPoints(reprojectsrc, rotation_vec, translation_vec, cam_matrix, dist_coeffs)
     reprojectdst = tuple(map(tuple, reprojectdst.reshape(8, 2)))
 
     # calc euler angle
@@ -90,9 +87,9 @@ def main():
                 for start, end in line_pairs:
                     cv2.line(frame, reprojectdst[start], reprojectdst[end], (0, 0, 255))
 
-                cv2.putText(frame, "X: " + "{:7.2f}".format(euler_angle[0, 0]), (20, 20), cv2.FONT_HERSHEY_SIMPLEX, 0.75, (50, 50, 90), thickness=2)
-                cv2.putText(frame, "Y: " + "{:7.2f}".format(euler_angle[1, 0]), (20, 50), cv2.FONT_HERSHEY_SIMPLEX, 0.75, (50, 90, 90), thickness=2)
-                cv2.putText(frame, "Z: " + "{:7.2f}".format(euler_angle[2, 0]), (20, 80), cv2.FONT_HERSHEY_SIMPLEX, 0.75, (0, 0, 0), thickness=2)
+                cv2.putText(frame, "X: " + "{:7.2f}".format(euler_angle[0, 0]), (20, 20), cv2.FONT_HERSHEY_SIMPLEX, 0.75, (150, 50, 50), thickness=2)
+                cv2.putText(frame, "Y: " + "{:7.2f}".format(euler_angle[1, 0]), (20, 50), cv2.FONT_HERSHEY_SIMPLEX, 0.75, (50, 150, 50), thickness=2)
+                cv2.putText(frame, "Z: " + "{:7.2f}".format(euler_angle[2, 0]), (20, 80), cv2.FONT_HERSHEY_SIMPLEX, 0.75, (50, 50, 150), thickness=2)
                 print ("X:" + str(euler_angle[0, 0]))
 
             cv2.imshow("demo", frame)
