@@ -43,6 +43,7 @@ line_pairs = [[0, 1], [1, 2], [2, 3], [3, 0],
               [4, 5], [5, 6], [6, 7], [7, 4],
               [0, 4], [1, 5], [2, 6], [3, 7]]
 
+CHEEK_IDXS = OrderedDict([("left_cheek", (1,2,3,4,5,48,49,31)), ("right_cheek", (11,12,13,14,15,35,53,54))])
 
 def get_head_pose(shape):
     image_pts = np.float32([shape[17], shape[21], shape[22], shape[26], shape[36],

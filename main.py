@@ -1,19 +1,27 @@
 import os
 import tkinter
-import cv2
 import PIL.Image, PIL.ImageTk
 import time
+import time
+import random
+import numpy as np
+import cv2
 import dlib
 import imutils
 from imutils import face_utils
+from oscpy.client import OSCClient
+from collections import OrderedDict
+
 from unit_tests_concepts import headPoseEstimation as hpe
 print("[INFO] loading facial landmark predictor...")
 
 detector = dlib.get_frontal_face_detector()
 model = os.path.join('data','shape_predictor_68_face_landmarks.dat')
 predictor = dlib.shape_predictor(model)
-
-
+CHEEK_IDXS = OrderedDict([("left_cheek", (1,2,3,4,5,48,49,31)), ("right_cheek", (11,12,13,14,15,35,53,54))])
+address = "127.0.0.1"
+port = 9001
+osc = OSCClient(address, port)
 
 
 
@@ -34,7 +42,7 @@ class App(tkinter.Tk):
         self.video_source = video_source
         self.detect = tkinter.BooleanVar(value=False) # when true, dlib will detect faces etc
         self.headPoseEst = tkinter.BooleanVar(value=False) # when true, head pose estimation from dlib landmarks
-        self.transmit = False # when true, osc msg will be sent
+        self.stream = tkinter.BooleanVar(value=False) # when true, osc msg will be sent
         self.procHead = True #
         self.procFace = True #
         self.x = self.y = 0
@@ -76,8 +84,10 @@ class App(tkinter.Tk):
         self.faceDetect.pack(side="left", fill='both')
         self.faceDetect = tkinter.Checkbutton(self.tb, text="Head", variable=self.headPoseEst, command=self.callback2)
         self.faceDetect.pack(side="left", fill='both')
-        self.StartServer = tkinter.Button(self.tb, text="Snapshot",  command=self.snapshot)
-        self.StartServer.pack(side="left", fill='both')
+        self.btnStream = tkinter.Checkbutton(self.tb, text="Stream", variable=self.stream, command=self.callback2)
+        self.btnStream.pack(side="left", fill='both')
+        #self.StartServer = tkinter.Button(self.tb, text="Snapshot",  command=self.snapshot)
+        #self.StartServer.pack(side="left", fill='both')
         self.btnEnd = tkinter.Label(self.tb, text="-", bd=1, relief='sunken', anchor='w')
         self.btnEnd.pack(side="left", fill='both')
     def setupEvents(self):
@@ -103,22 +113,33 @@ class App(tkinter.Tk):
             # convert the facial landmark (x, y)-coordinates to a NumPy array
             shape = predictor(gray, rect)
             shape = face_utils.shape_to_np(shape)
-            if self.headPoseEst.get() == True:
-                self.procHeadRotation(gray,shape)
             # loop over the (x, y)-coordinates for the facial landmarks
             # and draw them on the image
             for (x, y) in shape:
                 cv2.circle(gray, (x, y), 1, (0, 0, 255), -1)
-        return gray
+
+            if self.headPoseEst.get() == True:
+                self.procHeadRotation(gray,shape)
+
     def procHeadRotation(self,frame,shape):
         reprojectdst, euler_angle = hpe.get_head_pose(shape)
         for start, end in hpe.line_pairs:
             cv2.line(frame, reprojectdst[start], reprojectdst[end], (0, 0, 255))
 
-        cv2.putText(frame, "X: " + "{:7.2f}".format(euler_angle[0, 0]), (20, 20), cv2.FONT_HERSHEY_SIMPLEX, 0.75, (150, 50, 50), thickness=2)
-        cv2.putText(frame, "Y: " + "{:7.2f}".format(euler_angle[1, 0]), (20, 50), cv2.FONT_HERSHEY_SIMPLEX, 0.75, (50, 150, 50), thickness=2)
-        cv2.putText(frame, "Z: " + "{:7.2f}".format(euler_angle[2, 0]), (20, 80), cv2.FONT_HERSHEY_SIMPLEX, 0.75, (50, 50, 150), thickness=2)
-        return frame
+        cv2.putText(frame, "X: " + "{:7.2f}".format(euler_angle[0, 0]), (20, 20), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (150, 50, 50), thickness=2)
+        cv2.putText(frame, "Y: " + "{:7.2f}".format(euler_angle[1, 0]), (20, 50), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (50, 150, 50), thickness=2)
+        cv2.putText(frame, "Z: " + "{:7.2f}".format(euler_angle[2, 0]), (20, 80), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (50, 50, 150), thickness=2)
+        if self.stream.get():
+            osc.send_message(b'/headRot', [round(euler_angle[0, 0], 2),round(euler_angle[1, 0], 2),round(euler_angle[2, 0], 2)])
+            print ("HEAD ROT:", [round(euler_angle[0, 0], 2),round(euler_angle[1, 0], 2),round(euler_angle[2, 0], 2)])
+        # for (_, name) in enumerate(CHEEK_IDXS.keys()):
+        #     pts = np.zeros((len(CHEEK_IDXS[name]), 2), np.int32)
+        #     for i,j in enumerate(CHEEK_IDXS[name]):
+        #         pts[i] = [shape.part(j).x, shape.part(j).y]
+
+        #     pts = pts.reshape((-1,1,2))
+        #     cv2.polylines(frame,[pts],True,(0,255,0),thickness = 2)
+        # return frame,euler_angle
     def update(self):
         # if camera is ON
         if self.vid:
@@ -127,7 +148,7 @@ class App(tkinter.Tk):
             gray = cv2.cvtColor(frame2, cv2.COLOR_BGR2GRAY)
             if ret:
                 if self.detect.get():
-                    gray = self.faceDetector(gray)
+                    self.faceDetector(gray)
                 self.photo = PIL.ImageTk.PhotoImage(image = PIL.Image.fromarray(frame))
                 self.photo2 = PIL.ImageTk.PhotoImage(image = PIL.Image.fromarray(gray))
                 self.canvas1.create_image(0, 0, image = self.photo, anchor = tkinter.NW,tags="image")
