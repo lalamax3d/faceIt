@@ -11,7 +11,6 @@ import imutils
 from imutils import face_utils
 from oscpy.client import OSCClient
 from collections import OrderedDict
-
 from unit_tests_concepts import headPoseEstimation as hpe
 print("[INFO] loading facial landmark predictor...")
 
@@ -72,7 +71,7 @@ class App(tkinter.Tk):
         # NON WINDOW STUFF (TECH)
 
         # After it is called once, the update method will be automatically called every delay milliseconds
-        self.delay = 15
+        self.delay = 200 # 5 frames per second
         self.update()
         # finalize stuff
         self.setupEvents()
