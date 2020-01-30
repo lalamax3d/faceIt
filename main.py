@@ -2,7 +2,7 @@ import os
 import tkinter
 import PIL.Image, PIL.ImageTk
 import time
-import time
+import timeit
 import random
 import numpy as np
 import cv2
@@ -12,6 +12,8 @@ from imutils import face_utils
 from oscpy.client import OSCClient
 from collections import OrderedDict
 from unit_tests_concepts import headPoseEstimation as hpe
+from faceit import utils as utils
+
 print("[INFO] loading facial landmark predictor...")
 
 detector = dlib.get_frontal_face_detector()
@@ -30,7 +32,8 @@ class App(tkinter.Tk):
         tkinter.Tk.__init__(self)
         self.title("FaceIT")
         self.configure(background='dark slate gray')
-        self.geometry('660x290+700+120')
+        # self.geometry('660x290+700+120')
+        self.geometry('1300x540+300+120')
         self.resizable(width=True, height=True)
         self.minsize(width=660, height=290)
         self.maxsize(width=1320, height=600)
@@ -39,11 +42,15 @@ class App(tkinter.Tk):
         self.capture = tkinter.BooleanVar(value=False) # when true, video will be captured and updated in UI frame
         self.vid = None # holds video stream from camera
         self.video_source = video_source
+
         self.detect = tkinter.BooleanVar(value=False) # when true, dlib will detect faces etc
+        self.headScaleFac = tkinter.BooleanVar(value=False) # when true, head pose estimation from dlib landmarks
         self.headPoseEst = tkinter.BooleanVar(value=False) # when true, head pose estimation from dlib landmarks
         self.stream = tkinter.BooleanVar(value=False) # when true, osc msg will be sent
-        self.procHead = True #
-        self.procFace = True #
+
+        self.refScaleFactor = None # will be used for ref head start pose in frame (rect size - w,h)
+        #self.procHead = True #
+        #self.procFace = True #
         self.x = self.y = 0
 
         self.isSel = False # user selecting viewport area etc
@@ -71,7 +78,7 @@ class App(tkinter.Tk):
         # NON WINDOW STUFF (TECH)
 
         # After it is called once, the update method will be automatically called every delay milliseconds
-        self.delay = 200 # 5 frames per second
+        self.delay = 100 # 100 is good for 30fps in blender, 200 is good for 25 fps :D
         self.update()
         # finalize stuff
         self.setupEvents()
@@ -81,8 +88,10 @@ class App(tkinter.Tk):
         self.btnStart.pack(side="left", fill='both')
         self.faceDetect = tkinter.Checkbutton(self.tb, text="Face", variable=self.detect, command=self.callback2)
         self.faceDetect.pack(side="left", fill='both')
-        self.faceDetect = tkinter.Checkbutton(self.tb, text="Head", variable=self.headPoseEst, command=self.callback2)
-        self.faceDetect.pack(side="left", fill='both')
+        self.headRot = tkinter.Checkbutton(self.tb, text="Head", variable=self.headPoseEst, command=self.callback2)
+        self.headRot.pack(side="left", fill='both')
+        self.headScale = tkinter.Checkbutton(self.tb, text="ScaleFactor", variable=self.headScaleFac, command=self.callback2)
+        self.headScale.pack(side="left", fill='both')
         self.btnStream = tkinter.Checkbutton(self.tb, text="Stream", variable=self.stream, command=self.callback2)
         self.btnStream.pack(side="left", fill='both')
         #self.StartServer = tkinter.Button(self.tb, text="Snapshot",  command=self.snapshot)
@@ -109,18 +118,20 @@ class App(tkinter.Tk):
         # loop over the face detections
         for rect in rects:
             # determine the facial landmarks for the face region, then
-            # convert the facial landmark (x, y)-coordinates to a NumPy array
             shape = predictor(gray, rect)
-            shape = face_utils.shape_to_np(shape)
-            # loop over the (x, y)-coordinates for the facial landmarks
-            # and draw them on the image
-            for (x, y) in shape:
-                cv2.circle(gray, (x, y), 1, (0, 0, 255), -1)
-
             if self.headPoseEst.get() == True:
                 self.procHeadRotation(gray,shape)
+            if self.headScaleFac.get() == True:
+                self.procScaleFactor(gray,shape)
+            # loop over the (x, y)-coordinates for the facial landmarks and draw them on the image
+            npShape = face_utils.shape_to_np(shape)
+            for (x, y) in npShape:
+                cv2.circle(gray, (x, y), 1, (0, 0, 255), -1)
 
     def procHeadRotation(self,frame,shape):
+        # shape is dlib detector shape ( contains rect and all landmark parts)
+        # convert the facial landmark (x, y)-coordinates to a NumPy array
+        npShape = face_utils.shape_to_np(shape)
         reprojectdst, euler_angle = hpe.get_head_pose(shape)
         for start, end in hpe.line_pairs:
             cv2.line(frame, reprojectdst[start], reprojectdst[end], (0, 0, 255))
@@ -131,19 +142,24 @@ class App(tkinter.Tk):
         if self.stream.get():
             osc.send_message(b'/headRot', [round(euler_angle[0, 0], 2),round(euler_angle[1, 0], 2),round(euler_angle[2, 0], 2)])
             print ("HEAD ROT:", [round(euler_angle[0, 0], 2),round(euler_angle[1, 0], 2),round(euler_angle[2, 0], 2)])
-        # for (_, name) in enumerate(CHEEK_IDXS.keys()):
-        #     pts = np.zeros((len(CHEEK_IDXS[name]), 2), np.int32)
-        #     for i,j in enumerate(CHEEK_IDXS[name]):
-        #         pts[i] = [shape.part(j).x, shape.part(j).y]
 
-        #     pts = pts.reshape((-1,1,2))
-        #     cv2.polylines(frame,[pts],True,(0,255,0),thickness = 2)
-        # return frame,euler_angle
+    def procScaleFactor(self,frame,shape):
+        # shape is dlib detector shape ( contains rect and all landmark parts)
+        # TODO: if self.scaleFactor is not defined, define it, else compare and print
+        if self.refScaleFactor == None :
+            npRect = face_utils.rect_to_bb(shape.rect)
+            self.refScaleFactor = (npRect[2],npRect[3])
+            print ("ORIG SCALE:",npRect[2],npRect[3])
+        else:
+            npRect = face_utils.rect_to_bb(shape.rect)
+            print ("Scale Factor:", npRect[2]/self.refScaleFactor[0])
+        # print (shape.num_parts) # 68
+
     def update(self):
         # if camera is ON
         if self.vid:
             ret, frame = self.vid.get_frame()
-            frame2 = imutils.resize(frame, width=320)
+            frame2 = imutils.resize(frame, width=640)
             gray = cv2.cvtColor(frame2, cv2.COLOR_BGR2GRAY)
             if ret:
                 if self.detect.get():
@@ -233,7 +249,7 @@ class MyVideoCapture:
             if ret:
                 # Return a boolean success flag and the current frame converted to BGR
                 small = cv2.resize(frame,(320,240))
-                return (ret, cv2.cvtColor(small, cv2.COLOR_BGR2RGB))
+                return (ret, cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
             else:
                 return (ret, None)
         else:
