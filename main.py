@@ -127,6 +127,10 @@ class App(tkinter.Tk):
             npShape = face_utils.shape_to_np(shape)
             for (x, y) in npShape:
                 cv2.circle(gray, (x, y), 1, (0, 0, 255), -1)
+            mean,vectors = utils.get_meanPoint(shape)
+            print ("VECTORS:",len(vectors))
+            
+            cv2.circle(gray, mean, 5,(0, 255, 0), -1)
 
     def procHeadRotation(self,frame,shape):
         # shape is dlib detector shape ( contains rect and all landmark parts)
@@ -154,13 +158,15 @@ class App(tkinter.Tk):
             npRect = face_utils.rect_to_bb(shape.rect)
             print ("Scale Factor:", npRect[2]/self.refScaleFactor[0])
         # print (shape.num_parts) # 68
+        #print ("POINT 0 : " , shape.part(0))
 
     def update(self):
         # if camera is ON
         if self.vid:
             ret, frame = self.vid.get_frame()
             frame2 = imutils.resize(frame, width=640)
-            gray = cv2.cvtColor(frame2, cv2.COLOR_BGR2GRAY)
+            # gray = cv2.cvtColor(frame2, cv2.COLOR_BGR2GRAY)
+            gray = imutils.resize(frame, width=640)
             if ret:
                 if self.detect.get():
                     self.faceDetector(gray)
