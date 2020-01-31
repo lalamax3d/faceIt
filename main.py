@@ -128,8 +128,8 @@ class App(tkinter.Tk):
             for (x, y) in npShape:
                 cv2.circle(gray, (x, y), 1, (0, 0, 255), -1)
             mean,vectors = utils.get_meanPoint(shape)
-            print ("VECTORS:",len(vectors))
-            
+            # print ("VECTORS:",len(vectors))
+
             cv2.circle(gray, mean, 5,(0, 255, 0), -1)
 
     def procHeadRotation(self,frame,shape):
@@ -166,11 +166,19 @@ class App(tkinter.Tk):
             ret, frame = self.vid.get_frame()
             frame2 = imutils.resize(frame, width=640)
             # gray = cv2.cvtColor(frame2, cv2.COLOR_BGR2GRAY)
-            gray = imutils.resize(frame, width=640)
+            gray = imutils.resize(frame2, width=320)
+
             if ret:
                 if self.detect.get():
                     self.faceDetector(gray)
-                self.photo = PIL.ImageTk.PhotoImage(image = PIL.Image.fromarray(frame))
+                    # empty image
+                    pimg1 = utils.createBlankImage(240,320,c=100)
+                    pimg2 = utils.createBlankImage(240,320,c=50)
+                    pimg3 = utils.createBlankImage(240,320,c=150)
+                    gray = np.concatenate((gray, pimg1), axis=1)
+                    temp = np.concatenate((pimg2, pimg3), axis=1)
+                    gray = np.concatenate((gray, temp), axis=0)
+                self.photo = PIL.ImageTk.PhotoImage(image = PIL.Image.fromarray(frame2))
                 self.photo2 = PIL.ImageTk.PhotoImage(image = PIL.Image.fromarray(gray))
                 self.canvas1.create_image(0, 0, image = self.photo, anchor = tkinter.NW,tags="image")
                 self.canvas2.create_image(0, 0, image = self.photo2, anchor = tkinter.NW,tags="image")
