@@ -33,3 +33,7 @@ def createBlankImage(w,h,c=0):
     img.fill(c) # or img[:] = 255
     cv2.circle(img, (160, 120), 50, (0, 0, 255), -1)
     return img
+
+def snapshot(img=None):
+    if img:
+        cv2.imwrite("frame-" + time.strftime("%d-%m-%Y-%H-%M-%S") + ".jpg", cv2.cvtColor(img, cv2.COLOR_RGB2BGR))

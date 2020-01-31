@@ -28,7 +28,7 @@ osc = OSCClient(address, port)
 
 class App(tkinter.Tk):
     # def __init__(self, window, window_title, video_source=0):
-    def __init__(self, video_source=0):
+    def __init__(self, video_source=1):
         tkinter.Tk.__init__(self)
         self.title("FaceIT")
         self.configure(background='dark slate gray')
@@ -48,6 +48,7 @@ class App(tkinter.Tk):
         self.headPoseEst = tkinter.BooleanVar(value=False) # when true, head pose estimation from dlib landmarks
         self.stream = tkinter.BooleanVar(value=False) # when true, osc msg will be sent
 
+        self.shape = None # shape object from dlib contains rect and parts 68
         self.refScaleFactor = None # will be used for ref head start pose in frame (rect size - w,h)
         #self.procHead = True #
         #self.procFace = True #
@@ -82,20 +83,22 @@ class App(tkinter.Tk):
         self.update()
         # finalize stuff
         self.setupEvents()
-        # self.window.mainloop()
+        # DEFAULT ACTIONS
+        self.toggleCam()
+        self.detect.set(True)
     def addButtonsInToolbar(self):
         self.btnStart = tkinter.Button(self.tb, text="Start", relief="raised", command=self.toggleCam)
         self.btnStart.pack(side="left", fill='both')
         self.faceDetect = tkinter.Checkbutton(self.tb, text="Face", variable=self.detect, command=self.callback2)
         self.faceDetect.pack(side="left", fill='both')
-        self.headRot = tkinter.Checkbutton(self.tb, text="Head", variable=self.headPoseEst, command=self.callback2)
-        self.headRot.pack(side="left", fill='both')
+        self.btnNeutral = tkinter.Button(self.tb, text="Neutral", relief="raised", command=self.setDefaultPose)
+        self.btnNeutral.pack(side="left", fill='both')
         self.headScale = tkinter.Checkbutton(self.tb, text="ScaleFactor", variable=self.headScaleFac, command=self.callback2)
         self.headScale.pack(side="left", fill='both')
+        self.headRot = tkinter.Checkbutton(self.tb, text="Head", variable=self.headPoseEst, command=self.callback2)
+        self.headRot.pack(side="left", fill='both')
         self.btnStream = tkinter.Checkbutton(self.tb, text="Stream", variable=self.stream, command=self.callback2)
         self.btnStream.pack(side="left", fill='both')
-        #self.StartServer = tkinter.Button(self.tb, text="Snapshot",  command=self.snapshot)
-        #self.StartServer.pack(side="left", fill='both')
         self.btnEnd = tkinter.Label(self.tb, text="-", bd=1, relief='sunken', anchor='w')
         self.btnEnd.pack(side="left", fill='both')
     def setupEvents(self):
@@ -106,31 +109,89 @@ class App(tkinter.Tk):
         self.canvas1.bind("<B1-Motion>", self.on_move_press)
         self.canvas1.bind("<ButtonRelease-1>", self.on_button_release)
 
-    def snapshot(self):
+    def toggleCam(self):
+        # open video source (by default this will try to open the computer webcam)
+        #if self.btnStart.config('relief')[-1] == 'sunken':
+        self.capture.set(not self.capture.get())
+        print ("TURNING CAMERA:", self.capture.get())
+
+        if self.capture.get() == False:
+            # disable camera,
+            del self.vid
+            self.vid = None
+            self.status.text = "Stopping Camera"
+            self.btnStart.config(relief="raised",text='Start')
+        else:
+            # enable camera , bind video stream
+            self.vid = MyVideoCapture(self.video_source)
+            self.status.text = "Starting Camera"
+            self.btnStart.config(relief="sunken",text='Stop')
+    
+    def setDefaultPose(self):
+        global detector,predictor
         if self.vid:
             ret, frame = self.vid.get_frame()
+            rects = detector(frame, 0)
+            self.shape = predictor(gray, rect[0])
+    def update(self):
+        # if camera is ON
+        if self.vid:
+            ret, frame = self.vid.get_frame()
+            # frame = imutils.resize(frame, width=640)
+            # gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+            gray = imutils.resize(frame, width=320)
             if ret:
-                cv2.imwrite("frame-" + time.strftime("%d-%m-%Y-%H-%M-%S") + ".jpg", cv2.cvtColor(frame, cv2.COLOR_RGB2BGR))
-    def faceDetector(self,gray):
-        global detector,predictor
-        # detect faces in the grayscale frame
-        rects = detector(gray, 0)
-        # loop over the face detections
-        for rect in rects:
-            # determine the facial landmarks for the face region, then
-            shape = predictor(gray, rect)
-            if self.headPoseEst.get() == True:
-                self.procHeadRotation(gray,shape)
-            if self.headScaleFac.get() == True:
-                self.procScaleFactor(gray,shape)
-            # loop over the (x, y)-coordinates for the facial landmarks and draw them on the image
-            npShape = face_utils.shape_to_np(shape)
-            for (x, y) in npShape:
-                cv2.circle(gray, (x, y), 1, (0, 0, 255), -1)
-            mean,vectors = utils.get_meanPoint(shape)
-            # print ("VECTORS:",len(vectors))
+                if self.detect.get():
+                    shape = self.faceDetector(gray)
+                    # empty image
+                    pimg1 = utils.createBlankImage(240,320,c=100)
+                    pimg2 = utils.createBlankImage(240,320,c=50)
+                    pimg3 = utils.createBlankImage(240,320,c=150)
+                    gray = np.concatenate((gray, pimg1), axis=1)
+                    temp = np.concatenate((pimg2, pimg3), axis=1)
+                    gray = np.concatenate((gray, temp), axis=0)
+                self.photo = PIL.ImageTk.PhotoImage(image = PIL.Image.fromarray(frame))
+                self.photo2 = PIL.ImageTk.PhotoImage(image = PIL.Image.fromarray(gray))
+                self.canvas1.create_image(0, 0, image = self.photo, anchor = tkinter.NW,tags="image")
+                self.canvas2.create_image(0, 0, image = self.photo2, anchor = tkinter.NW,tags="image")
+            else:
+                print ("ERROR: Can't Capture frame from)
+        if self.isSel :
+            self.canvas1.tag_raise('rect')
+            self.canvas1.coords(self.selRect, (self.start_x, self.start_y, self.curX, self.curY))
+            # self.canvas1.coords(self.selRect)
+        self.after(self.delay, self.update)
 
-            cv2.circle(gray, mean, 5,(0, 255, 0), -1)
+    def faceDetector(self,image):
+        """this will run dlib detector and draw circles on frame
+        will return shape object 
+        
+        Arguments:
+            image {cv2 captured frame} -- [description]
+        """      
+        global detector,predictor
+        # detect faces in the imagescale frame
+        rects = detector(image, 0)
+        # loop over the face detections
+        #for rect in rects:
+        # determine the facial landmarks for the face region, then
+        shape = predictor(image, rects[0])
+        # loop over the (x, y)-coordinates for the facial landmarks and draw them on the image
+        npShape = face_utils.shape_to_np(shape)
+        for (x, y) in npShape:
+            cv2.circle(image, (x, y), 1, (0, 0, 255), -1)
+        
+        # if self.headPoseEst.get() == True:
+        #     self.procHeadRotation(image,shape)
+        # if self.headScaleFac.get() == True:
+        #     self.procScaleFactor(image,shape)
+        
+        #mean,vectors = utils.get_meanPoint(shape)
+        # print ("VECTORS:",len(vectors))
+        #cv2.circle(image, mean, 5,(0, 255, 0), -1)
+        
+        
+            
 
     def procHeadRotation(self,frame,shape):
         # shape is dlib detector shape ( contains rect and all landmark parts)
@@ -160,50 +221,7 @@ class App(tkinter.Tk):
         # print (shape.num_parts) # 68
         #print ("POINT 0 : " , shape.part(0))
 
-    def update(self):
-        # if camera is ON
-        if self.vid:
-            ret, frame = self.vid.get_frame()
-            frame2 = imutils.resize(frame, width=640)
-            # gray = cv2.cvtColor(frame2, cv2.COLOR_BGR2GRAY)
-            gray = imutils.resize(frame2, width=320)
 
-            if ret:
-                if self.detect.get():
-                    self.faceDetector(gray)
-                    # empty image
-                    pimg1 = utils.createBlankImage(240,320,c=100)
-                    pimg2 = utils.createBlankImage(240,320,c=50)
-                    pimg3 = utils.createBlankImage(240,320,c=150)
-                    gray = np.concatenate((gray, pimg1), axis=1)
-                    temp = np.concatenate((pimg2, pimg3), axis=1)
-                    gray = np.concatenate((gray, temp), axis=0)
-                self.photo = PIL.ImageTk.PhotoImage(image = PIL.Image.fromarray(frame2))
-                self.photo2 = PIL.ImageTk.PhotoImage(image = PIL.Image.fromarray(gray))
-                self.canvas1.create_image(0, 0, image = self.photo, anchor = tkinter.NW,tags="image")
-                self.canvas2.create_image(0, 0, image = self.photo2, anchor = tkinter.NW,tags="image")
-        if self.isSel :
-            self.canvas1.tag_raise('rect')
-            self.canvas1.coords(self.selRect, (self.start_x, self.start_y, self.curX, self.curY))
-            # self.canvas1.coords(self.selRect)
-        self.after(self.delay, self.update)
-    def toggleCam(self):
-        # open video source (by default this will try to open the computer webcam)
-        #if self.btnStart.config('relief')[-1] == 'sunken':
-        self.capture.set(not self.capture.get())
-        print ("TURNING CAMERA:", self.capture.get())
-
-        if self.capture.get() == False:
-            # disable camera,
-            del self.vid
-            self.vid = None
-            self.status.text = "Stopping Camera"
-            self.btnStart.config(relief="raised",text='Start')
-        else:
-            # enable camera , bind video stream
-            self.vid = MyVideoCapture(self.video_source)
-            self.status.text = "Starting Camera"
-            self.btnStart.config(relief="sunken",text='Stop')
     def callback2(self):
         print ("HERE:", self.detect.get())
     def callback(self,event):
@@ -224,7 +242,6 @@ class App(tkinter.Tk):
         self.isSel = True
         print ("Selection STARTED.. ")
         self.selRect = self.canvas1.create_rectangle(self.x, self.y, 1, 1, fill="",outline='white',tags="rect")
-
     def on_move_press(self, event):
         self.curX, self.curY = (event.x, event.y)
         # expand rectangle as you drag the mouse
